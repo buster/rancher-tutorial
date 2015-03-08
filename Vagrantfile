@@ -15,7 +15,11 @@ $expose_rancher_ui = 8080
 $vb_gui = false
 $vb_memory = 1024
 $vb_cpus = 1
-$rancheros_ip = "192.168.0.200"
+# The number of VMs will be added to the following string,
+# so Rancher will be on 192.168.0.200, the first RancherOS instance on 192.168.0.201, etc.
+$rancher_ip_start = "192.168.0.20"
+$rancherui_ip = $rancher_ip_start + "0"
+# the number of rancher instances
 $n_rancher = 1
 
 if File.exist?(CONFIG)
@@ -29,16 +33,16 @@ Vagrant.configure("2") do |config|
       config.vbguest.no_remote = true
     end
 
-  config.vm.define :rancheros do |rancheros|
-    rancheros.vm.box = "coreos-%s" % $update_channel
-    rancheros.vm.box_version = ">= 308.0.1"
-    rancheros.vm.box_url = "http://%s.release.core-os.net/amd64-usr/current/coreos_production_vagrant.json" % $update_channel
+  config.vm.define :rancherui do |rancherui|
+    rancherui.vm.box = "coreos-%s" % $update_channel
+    rancherui.vm.box_version = ">= 308.0.1"
+    rancherui.vm.box_url = "http://%s.release.core-os.net/amd64-usr/current/coreos_production_vagrant.json" % $update_channel
 
-    rancheros.vm.provider :vmware_fusion do |vb, override|
+    rancherui.vm.provider :vmware_fusion do |vb, override|
       override.vm.box_url = "http://%s.release.core-os.net/amd64-usr/current/coreos_production_vagrant_vmware_fusion.json" % $update_channel
     end
 
-    rancheros.vm.provider :virtualbox do |v|
+    rancherui.vm.provider :virtualbox do |v|
       # On VirtualBox, we don't have guest additions or a functional vboxsf
       # in CoreOS, so tell Vagrant that so it can be smarter.
       v.check_guest_additions = false
@@ -46,30 +50,33 @@ Vagrant.configure("2") do |config|
     end
 
 
-      rancheros.vm.hostname = "rancher"
+      rancherui.vm.hostname = "rancher"
 
-      rancheros.vm.network "forwarded_port", guest: 8080, host: $expose_rancher_ui, auto_correct: true
+      rancherui.vm.network "forwarded_port", guest: 8080, host: $expose_rancher_ui, auto_correct: true
 
-      rancheros.vm.provider :vmware_fusion do |vb|
+      rancherui.vm.provider :vmware_fusion do |vb|
         vb.gui = $vb_gui
       end
 
-      rancheros.vm.provider :virtualbox do |vb|
+      rancherui.vm.provider :virtualbox do |vb|
         vb.gui = $vb_gui
         vb.memory = $vb_memory
         vb.cpus = $vb_cpus
       end
 
-      config.vm.network "public_network", ip: $rancheros_ip
 
-      rancheros.vm.provision :shell, run: "always", :inline => "docker run -d -p 8080:8080 rancher/server:latest", :privileged => true
-      rancheros.vm.provision :shell, run: "always", :inline => "docker run -e CATTLE_AGENT_IP=%s -e WAIT=true -v /var/run/docker.sock:/var/run/docker.sock rancher/agent:latest http://%s:8080" % [$rancheros_ip, $rancheros_ip] , :privileged => true
+      config.vm.network "public_network", ip: $rancherui_ip
+
+      rancherui.vm.provision :shell, run: "always", :inline => "docker run -d -p 8080:8080 rancher/server:latest", :privileged => true
+      rancherui.vm.provision :shell, run: "always", :inline => "docker run -e CATTLE_AGENT_IP=%s -e WAIT=true -v /var/run/docker.sock:/var/run/docker.sock rancher/agent:latest http://%s:8080" % [$rancherui_ip, $rancherui_ip] , :privileged => true
 
   end
 
   (1..$n_rancher).each do |i|
     config.vm.define "rancher#{i}" do |rancher|
 
+      rancher_ip = $rancher_ip_start + i.to_s
+      rancher.vm.network "public_network", ip: $rancher_ip, auto_config: false, :adapter => 2
       rancher.vm.box       = "rancheros"
       rancher.vm.box_url   = "http://cdn.rancher.io/vagrant/x86_64/prod/rancheros_virtualbox.box"
       rancher.ssh.username = "rancher"
@@ -78,16 +85,14 @@ Vagrant.configure("2") do |config|
         vb.check_guest_additions = false
         vb.functional_vboxsf     = false
         vb.memory = "1024"
-        vb.gui = true
-        #config.vm.network "private_network", :type => 'dhcp', :name => 'vboxnet0', :adapter => 2, auto_confi:false
-        config.vm.network "public_network", ip: "192.168.0.20#{i}", auto_config: false, :adapter => 2
+        vb.gui = $vb_gui
       end
 
       rancher.vm.synced_folder ".", "/vagrant", disabled: true
 
-      rancher.vm.provision :shell, run: "always", :inline => "sudo sh -c \"echo -e 'auto lo\niface lo inet loopback\n\nauto eth1\niface eth1 inet static\n      address 192.168.0.20#{i}\n      netmask 255.255.255.0\n' > /etc/network/interfaces\""
+      rancher.vm.provision :shell, run: "always", :inline => "sudo sh -c \"echo -e 'auto lo\niface lo inet loopback\n\nauto eth1\niface eth1 inet static\n      address #{rancher_ip}\n      netmask 255.255.255.0\n' > /etc/network/interfaces\""
       rancher.vm.provision :shell, run: "always", :inline => "sudo /etc/init.d/S40network restart"
-      rancher.vm.provision :shell, run: "always", :inline => "docker run --rm -i --privileged -v /var/run/docker.sock:/var/run/docker.sock rancher/agent:latest http://%s:8080" % $rancheros_ip
+      rancher.vm.provision :shell, run: "always", :inline => "docker run --rm -i --privileged -v /var/run/docker.sock:/var/run/docker.sock rancher/agent:latest http://%s:8080" % $rancherui_ip
 
     end
 

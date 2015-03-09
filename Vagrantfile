@@ -65,7 +65,7 @@ Vagrant.configure("2") do |config|
       end
 
 
-      config.vm.network "public_network", ip: $rancherui_ip
+      config.vm.network "private_network", ip: $rancherui_ip
 
       rancherui.vm.provision :shell, run: "always", :inline => "docker run -d -p 8080:8080 rancher/server:latest", :privileged => true
       rancherui.vm.provision :shell, run: "always", :inline => "docker run -e CATTLE_AGENT_IP=%s -e WAIT=true -v /var/run/docker.sock:/var/run/docker.sock rancher/agent:latest http://%s:8080" % [$rancherui_ip, $rancherui_ip] , :privileged => true
@@ -76,7 +76,7 @@ Vagrant.configure("2") do |config|
     config.vm.define "rancher#{i}" do |rancher|
 
       rancher_ip = $rancher_ip_start + i.to_s
-      rancher.vm.network "public_network", ip: $rancher_ip, auto_config: false, :adapter => 2
+      rancher.vm.network "private_network", ip: rancher_ip, auto_config: false, :adapter => 2
       rancher.vm.box       = "rancheros"
       rancher.vm.box_url   = "http://cdn.rancher.io/vagrant/x86_64/prod/rancheros_virtualbox.box"
       rancher.ssh.username = "rancher"

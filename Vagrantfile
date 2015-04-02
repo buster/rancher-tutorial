@@ -85,7 +85,7 @@ Vagrant.configure("2") do |config|
         vb.check_guest_additions = false
         vb.functional_vboxsf     = false
         vb.memory = "1024"
-        vb.gui = $vb_gui
+        vb.gui = true
       end
 
       rancher.vm.synced_folder ".", "/vagrant", disabled: true
@@ -93,6 +93,7 @@ Vagrant.configure("2") do |config|
       rancher.vm.provision :shell, run: "always", :inline => "sudo sh -c \"echo -e 'auto lo\niface lo inet loopback\n\nauto eth1\niface eth1 inet static\n      address #{rancher_ip}\n      netmask 255.255.255.0\n' > /etc/network/interfaces\""
       rancher.vm.provision :shell, run: "always", :inline => "sudo /etc/init.d/S40network restart"
       rancher.vm.provision :shell, run: "always", :inline => "docker run --rm -i --privileged -v /var/run/docker.sock:/var/run/docker.sock rancher/agent:latest http://%s:8080" % $rancherui_ip
+      rancher.vm.provision :shell, run: "always", :inline => "sudo kill -HUP `ps | grep \"/usr/sbin/sshd -D\"  | grep -v grep | awk '{print $1}'`"
 
     end
 
